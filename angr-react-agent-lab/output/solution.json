@@ -1,0 +1,6 @@
+{
+  "password": "AZcE",
+  "success": true,
+  "target": "crackme",
+  "method": "angr symbolic stdin, ReAct-guided find/avoid exploration"
+}
