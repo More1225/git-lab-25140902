@@ -1,0 +1,5 @@
+# No Python packages are required.
+# Bundled workspace tools used by default:
+# - tools/radare2-6.1.6-w64/bin/radare2.exe
+# - tools/ghidra_12.1_PUBLIC/support/analyzeHeadless.bat
+# - tools/jdk-21.0.11+10

@@ -1,0 +1,5 @@
+{
+  "vuln_type": "stack_buffer_overflow",
+  "location": "0x401382 (__strcpy_chk call in function starting at 0x401264)",
+  "cause": "stdin data read by fgets into a 128-byte stack buffer at rsp+32 reaches __strcpy_chk copying into a 16-byte stack buffer at rsp after only a <=100 length check."
+}
