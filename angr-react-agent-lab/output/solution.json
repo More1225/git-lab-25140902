@@ -2,5 +2,25 @@
   "password": "AZcE",
   "success": true,
   "target": "crackme",
-  "method": "angr symbolic stdin, ReAct-guided find/avoid exploration"
+  "method": "derived from inspect_target, explore, solve_input, and validate_solution observations",
+  "evidence": {
+    "solve_input": {
+      "raw_model_hex": "415a63453f3f3f3f3f3f",
+      "candidate": "AZcE?????",
+      "minimal_password": "AZcE",
+      "constraints_checked": [
+        "input[0] == 'A'",
+        "input[1] == 'Z'",
+        "(input[2] ^ 0x12) == 'q'",
+        "(input[3] + 3) == 'H'"
+      ]
+    },
+    "validation": {
+      "password": "AZcE",
+      "runner": "angr concrete replay of check_password for ELF target on Windows",
+      "steps": 24,
+      "stdout": "Success! Flag is found.\n",
+      "success": true
+    }
+  }
 }

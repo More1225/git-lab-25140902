@@ -307,6 +307,7 @@ def run_agent() -> dict[str, Any]:
     tools = AngrToolbox(target)
     transcript: list[str] = []
     solution: dict[str, Any] = {}
+    observations: list[Observation] = []
 
     transcript.append("ReAct angr Agent Run")
     transcript.append("Model/planner: GPT-5 Codex assisted deterministic ReAct policy")
@@ -336,23 +337,43 @@ def run_agent() -> dict[str, Any]:
         transcript.append("Thought: " + thought)
         transcript.append("Action: " + action)
         obs = fn()
+        observations.append(obs)
         transcript.append(obs.render())
         transcript.append("")
+        if obs.tool == "explore" and not obs.result.get("success_reached", False):
+            transcript.append("Thought: Exploration did not reach the success state; stop instead of fabricating a solution.")
+            break
         if obs.tool == "solve_input" and "minimal_password" in obs.result:
             solution = dict(obs.result)
 
     password = solution.get("minimal_password", "")
-    transcript.append("Thought: Before finalizing, verify the concrete password by running the target once.")
-    transcript.append(f"Action: validate_solution({password!r})")
-    validation = tools.validate_solution(password)
-    transcript.append(validation.render())
-    transcript.append("")
+    if password:
+        transcript.append("Thought: solve_input returned a concrete minimal_password, so verify exactly that value before finalizing.")
+        transcript.append(f"Action: validate_solution({password!r})")
+        validation = tools.validate_solution(password)
+        observations.append(validation)
+        transcript.append(validation.render())
+        transcript.append("")
+    else:
+        validation = Observation(
+            "validate_solution",
+            {
+                "password": "",
+                "stdout": "",
+                "success": False,
+                "error": "No password was produced by solve_input in the prior Observation.",
+            },
+        )
 
     final = {
-        "password": password,
+        "password": validation.result.get("password", ""),
         "success": validation.result.get("success", False),
         "target": str(target.name),
-        "method": "angr symbolic stdin, ReAct-guided find/avoid exploration",
+        "method": "derived from inspect_target, explore, solve_input, and validate_solution observations",
+        "evidence": {
+            "solve_input": solution,
+            "validation": validation.result,
+        },
     }
     transcript.append("Final Answer:")
     transcript.append(json.dumps(final, indent=2, ensure_ascii=False))

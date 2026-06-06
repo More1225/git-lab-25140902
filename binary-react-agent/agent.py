@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -241,19 +242,40 @@ def extract_copy_flow(disassembly: str) -> str:
     return "\n".join(summary + interesting)
 
 
-def derive_final(observations: list[ToolObservation]) -> dict[str, str]:
+def evidence_present(text: str, patterns: list[str]) -> bool:
+    return all(re.search(pattern, text, re.IGNORECASE) for pattern in patterns)
+
+
+def derive_final(observations: list[ToolObservation]) -> tuple[dict[str, str], dict[str, list[str]]]:
+    """Derive the final answer only from concrete tool observations."""
     combined = "\n".join(obs.output for obs in observations)
-    if "__strcpy_chk" not in combined or "fgets" not in combined:
+    evidence = {
+        "imports": [],
+        "source_read": [],
+        "length_check": [],
+        "sink_copy": [],
+    }
+
+    if evidence_present(combined, [r"\bfgets\b", r"\b__strcpy_chk\b"]):
+        evidence["imports"].append("r2/Ghidra observations list both fgets and __strcpy_chk imports/PLT symbols.")
+    if evidence_present(combined, [r"0040130a\s+LEA\s+RDI,\[RSP \+ 0x20\]", r"00401316\s+MOV\s+ESI,0x80", r"0040131b\s+CALL\s+0x00401100"]):
+        evidence["source_read"].append("Ghidra shows fgets at 0x40131b with destination rsp+0x20 and size 0x80.")
+    if evidence_present(combined, [r"00401341\s+CALL\s+0x004010d0", r"0040134a\s+CMP\s+RAX,0x63", r"0040134e\s+JBE\s+0x00401377"]):
+        evidence["length_check"].append("Ghidra shows strlen-derived check accepts values up to 0x63 before the copy path.")
+    if evidence_present(combined, [r"00401377\s+MOV\s+RSI,RBX", r"0040137a\s+MOV\s+RDI,RSP", r"0040137d\s+MOV\s+EDX,0x10", r"00401382\s+CALL\s+0x00401120"]):
+        evidence["sink_copy"].append("Ghidra shows __strcpy_chk at 0x401382 copying source rbx/rsp+0x20 into destination rsp with object size 0x10.")
+
+    if not all(evidence.values()):
         return {
             "vuln_type": "unknown",
             "location": "unknown",
             "cause": "Static observations did not contain enough evidence for a vulnerability conclusion.",
-        }
+        }, evidence
     return {
         "vuln_type": "stack_buffer_overflow",
         "location": "0x401382 (__strcpy_chk call in function starting at 0x401264)",
         "cause": "stdin data read by fgets into a 128-byte stack buffer at rsp+32 reaches __strcpy_chk copying into a 16-byte stack buffer at rsp after only a <=100 length check.",
-    }
+    }, evidence
 
 
 def run_agent(target: Path, log_path: Path, vuln_path: Path) -> dict[str, str]:
@@ -299,8 +321,9 @@ def run_agent(target: Path, log_path: Path, vuln_path: Path) -> dict[str, str]:
         transcript.append(observation.render())
         transcript.append("")
 
-    final = derive_final(observations)
-    transcript.append("Thought: The r2 import data and Ghidra-side code flow agree on a stack copy sink fed by stdin.")
+    final, evidence = derive_final(observations)
+    transcript.append("Thought: The final answer must be assembled only from prior tool observations. The evidence used is:")
+    transcript.append(json.dumps(evidence, indent=2, ensure_ascii=False))
     transcript.append("Final Answer:")
     transcript.append(json.dumps(final, indent=2, ensure_ascii=False))
     transcript.append("")
